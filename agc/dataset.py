@@ -2,10 +2,16 @@ from os import path, listdir
 import numpy as np
 from scipy import stats as st
 import math
+import json
+import librosa
+
 class AtariDataset():
 
     TRAJS_SUBDIR = 'trajectories'
     SCREENS_SUBDIR = 'screens'
+    ANNS_SUBDIR = 'annotations'
+    ATARI_SUBDIR = 'atari_audio'
+    AUDIO_SUBDIR = 'human_audio'
 
     def __init__(self, data_path):
         
@@ -17,11 +23,15 @@ class AtariDataset():
 
         self.trajs_path = path.join(data_path, AtariDataset.TRAJS_SUBDIR)       
         self.screens_path = path.join(data_path, AtariDataset.SCREENS_SUBDIR)
+        self.anns_path = path.join(data_path, AtariDataset.ANNS_SUBDIR)
+        self.atari_path = path.join(data_path, AtariDataset.ATARI_SUBDIR)
+        self.audio_path = path.join(data_path, AtariDataset.AUDIO_SUBDIR)
     
         #check that the we have the trajs where expected
         assert path.exists(self.trajs_path)
         
         self.trajectories = self.load_trajectories()
+        self.annotations  = self.load_annotations()
 
         # compute the stats after loading
         self.stats = {}
@@ -66,6 +76,49 @@ class AtariDataset():
                             curr_traj.append(curr_trans)
                 trajectories[game][int(traj.split('.txt')[0])] = curr_traj
         return trajectories
+
+    def load_annotations(self):
+        annotations = {}
+        for game in listdir(self.anns_path):
+            annotations[game] = {}
+            ann_game_dir   = path.join(self.anns_path, game)
+            audio_game_dir = path.join(self.audio_path, game)
+
+            for ann in listdir(ann_game_dir):
+                
+                # compute total frames and audio length
+                key = int(ann.split(".")[0])
+                NUM_FRAMES = len(self.trajectories[game][key])
+
+                audio_file_path = path.join(audio_game_dir, f"{key}.wav")
+                y, sr = librosa.load(audio_file_path, sr=48000)
+                SECONDS = librosa.get_duration(y=y, sr=sr)
+
+                anns_file_path = path.join(ann_game_dir, ann)
+
+                curr_ann = []
+                json_info = json.load(open(anns_file_path, "r"))
+
+                for frame in range(NUM_FRAMES):
+                    data = {}
+
+                    data["word"] = None
+                    data["conf"] = 0.0
+
+                    for k in json_info.keys():
+                        start = int((json_info[k][0] / SECONDS) * NUM_FRAMES)
+                        end   = int((json_info[k][1] / SECONDS) * NUM_FRAMES)
+                        word  = json_info[k][2]
+                        conf  = json_info[k][3]
+
+                        if start <= frame and frame < end:
+                            data["word"] = word
+                            data["conf"] = conf
+
+                    curr_ann.append(data)
+
+                annotations[game][key] = curr_ann
+        return annotations
                    
 
     def compile_data(self, dataset_path, game, score_lb=0, score_ub=math.inf, max_nb_transitions=None):
@@ -93,7 +146,9 @@ class AtariDataset():
                 data.append({'action': get_action_name(cur_traj[pid]['action']),
                              'state':  state,
                              'reward': cur_traj[pid]['reward'],
-                             'terminal': cur_traj[pid]['terminal'] == 1
+                             'terminal': cur_traj[pid]['terminal'] == 1,
+                             'word': self.annotations[t][pid]['word'],
+                             'conf': self.annotations[t][pid]['conf'],
                             })
 
                 # if nb_transitions is None, we want the whole dataset limited only by lb and ub
