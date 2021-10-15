@@ -4,6 +4,7 @@ from scipy import stats as st
 import math
 import json
 import librosa
+import pickle
 
 class AtariDataset():
 
@@ -12,6 +13,7 @@ class AtariDataset():
     ANNS_SUBDIR = 'annotations'
     ATARI_SUBDIR = 'atari_audio'
     AUDIO_SUBDIR = 'human_audio'
+    PRECOMPUTED_HEATMAP = 'gaze_maps'
 
     def __init__(self, data_path):
         
@@ -26,12 +28,14 @@ class AtariDataset():
         self.anns_path = path.join(data_path, AtariDataset.ANNS_SUBDIR)
         self.atari_path = path.join(data_path, AtariDataset.ATARI_SUBDIR)
         self.audio_path = path.join(data_path, AtariDataset.AUDIO_SUBDIR)
+        self.heatmap_path = path.join(data_path, AtariDataset.PRECOMPUTED_HEATMAP)
     
         #check that the we have the trajs where expected
         assert path.exists(self.trajs_path)
         
-        self.trajectories = self.load_trajectories()
         self.annotations  = self.load_annotations()
+        self.heatmap = self.load_heatmap()
+        self.trajectories = self.load_trajectories()
 
         # compute the stats after loading
         self.stats = {}
@@ -73,6 +77,8 @@ class AtariDataset():
                             curr_trans['score']    = int(curr_data[2])
                             curr_trans['terminal'] = int(curr_data[3])
                             curr_trans['action']   = int(curr_data[4])
+                            curr_trans['ann']      = self.annotations[game][int(traj.split(".")[0])]
+                            curr_trans['heatmap']  = self.heatmap[game][traj.split(".")[0]]
                             curr_traj.append(curr_trans)
                 trajectories[game][int(traj.split('.txt')[0])] = curr_traj
         return trajectories
@@ -85,10 +91,11 @@ class AtariDataset():
             audio_game_dir = path.join(self.audio_path, game)
 
             for ann in listdir(ann_game_dir):
-                
+
                 # compute total frames and audio length
                 key = int(ann.split(".")[0])
-                NUM_FRAMES = len(self.trajectories[game][key])
+                game_folder = path.join(self.screens_path, game)
+                NUM_FRAMES = len(listdir(path.join(game_folder, str(key))))
 
                 audio_file_path = path.join(audio_game_dir, f"{key}.wav")
                 y, sr = librosa.load(audio_file_path, sr=48000)
@@ -119,7 +126,20 @@ class AtariDataset():
 
                 annotations[game][key] = curr_ann
         return annotations
-                   
+
+    def load_heatmap(self):
+        heatmaps = {}
+        for game in listdir(self.heatmap_path):
+            heatmap_game = path.join(self.heatmap_path, game)
+            data = pickle.load(open(heatmap_game, "rb"))
+
+            game = game.split(".")[0].split("gaze_")[1]
+            if game == "montezumarevenge":
+                game = "revenge"
+
+            heatmaps[game] = data
+
+        return heatmaps
 
     def compile_data(self, dataset_path, game, score_lb=0, score_ub=math.inf, max_nb_transitions=None):
 
@@ -147,8 +167,9 @@ class AtariDataset():
                              'state':  state,
                              'reward': cur_traj[pid]['reward'],
                              'terminal': cur_traj[pid]['terminal'] == 1,
-                             'word': self.annotations[t][pid]['word'],
-                             'conf': self.annotations[t][pid]['conf'],
+                             'word': cur_traj[pid]['ann']['word'],
+                             'conf': cur_traj[pid]['ann']['conf'],
+                             'heatmap': cur_traj[pid]['heatmap'],
                             })
 
                 # if nb_transitions is None, we want the whole dataset limited only by lb and ub
