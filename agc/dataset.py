@@ -56,6 +56,7 @@ class AtariDataset():
 
 
     def load_trajectories(self):
+        print("Loading trajectories...")        
 
         trajectories = {}
         for game in listdir(self.trajs_path):
@@ -63,10 +64,20 @@ class AtariDataset():
             game_dir = path.join(self.trajs_path, game)
             for traj in listdir(game_dir):
                 curr_traj = []
+                traj_num = int(traj.split(".")[0])
+                f = open(path.join(game_dir, traj))
+
+                # TODO: tidy up lengths 
+                f_len = len(f.readlines())
+                a_len = len(self.annotations[game][traj_num])
+                h_len = len(self.heatmap[game][traj_num])
+                diff = max(f_len - h_len, f_len - a_len)
+
                 with open(path.join(game_dir, traj)) as f:
+                    traj_num = int(traj.split(".")[0])
                     for i,line in enumerate(f):
                         #first line is the metadata, second is the header
-                        if i > 1:
+                        if i > 1 and i > diff:
                             #TODO will fix the spacing and True/False/integer in the next replay session
                             #frame,reward,score,terminal, action
                     
@@ -77,13 +88,14 @@ class AtariDataset():
                             curr_trans['score']    = int(curr_data[2])
                             curr_trans['terminal'] = int(curr_data[3])
                             curr_trans['action']   = int(curr_data[4])
-                            curr_trans['ann']      = self.annotations[game][int(traj.split(".")[0])]
-                            curr_trans['heatmap']  = self.heatmap[game][traj.split(".")[0]]
+                            curr_trans['ann']      = self.annotations[game][traj_num][i - diff]
+                            curr_trans['heatmap']  = self.heatmap[game][traj_num][i - diff]
                             curr_traj.append(curr_trans)
                 trajectories[game][int(traj.split('.txt')[0])] = curr_traj
         return trajectories
 
     def load_annotations(self):
+        print("Loading annotations...")
         annotations = {}
         for game in listdir(self.anns_path):
             annotations[game] = {}
@@ -123,21 +135,24 @@ class AtariDataset():
                             data["conf"] = conf
 
                     curr_ann.append(data)
-
                 annotations[game][key] = curr_ann
         return annotations
 
     def load_heatmap(self):
         heatmaps = {}
         for game in listdir(self.heatmap_path):
-            heatmap_game = path.join(self.heatmap_path, game)
-            data = pickle.load(open(heatmap_game, "rb"))
+            if "npy" in game:
+                heatmap_game = path.join(self.heatmap_path, game)
+                data = np.load(heatmap_game, allow_pickle=True)
 
-            game = game.split(".")[0].split("gaze_")[1]
-            if game == "montezumarevenge":
-                game = "revenge"
+                game = game.split(".")[0].split("gaze_")[1]
+                if game == "montezumarevenge":
+                    game = "revenge"
 
-            heatmaps[game] = data
+                heatmaps[game] = data.item()
+                #for i in range(0, len(data.item().keys())):
+                #    print(game)
+                #    print(data.item()[i+1].shape)
 
         return heatmaps
 
