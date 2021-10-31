@@ -14,6 +14,7 @@ class AtariDataset():
     ATARI_SUBDIR = 'atari_audio'
     AUDIO_SUBDIR = 'human_audio'
     PRECOMPUTED_HEATMAP = 'gaze_maps'
+    PASE_VEC = 'pase_vec'
 
     def __init__(self, data_path):
         
@@ -29,10 +30,12 @@ class AtariDataset():
         self.atari_path = path.join(data_path, AtariDataset.ATARI_SUBDIR)
         self.audio_path = path.join(data_path, AtariDataset.AUDIO_SUBDIR)
         self.heatmap_path = path.join(data_path, AtariDataset.PRECOMPUTED_HEATMAP)
+        self.pasevec_path = path.join(data_path, AtariDataset.PASE_VEC)
     
         #check that the we have the trajs where expected
         assert path.exists(self.trajs_path)
         
+        self.pasevec = self.load_pase()
         self.annotations  = self.load_annotations()
         self.heatmap = self.load_heatmap()
         self.trajectories = self.load_trajectories()
@@ -90,6 +93,7 @@ class AtariDataset():
                             curr_trans['action']   = int(curr_data[4])
                             curr_trans['ann']      = self.annotations[game][traj_num][i - diff]
                             curr_trans['heatmap']  = self.heatmap[game][traj_num][i - diff]
+                            curr_trans['pase']     = self.pasevec[game][traj_num][i]
                             curr_traj.append(curr_trans)
                 trajectories[game][int(traj.split('.txt')[0])] = curr_traj
         return trajectories
@@ -155,6 +159,18 @@ class AtariDataset():
                 #    print(data.item()[i+1].shape)
 
         return heatmaps
+
+    def load_pase(self):
+        print('Loading pase...')
+        pase = {}
+        for game in listdir(self.pasevec_path):
+            if "npy" in game:
+                pase_game = path.join(self.pasevec_path, game)
+                data = np.load(pase_game, allow_pickle=True).item()
+                game = game.split('_vec.npy')[0]
+                pase[game] = data
+
+        return pase
 
     def compile_data(self, dataset_path, game, score_lb=0, score_ub=math.inf, max_nb_transitions=None):
 
