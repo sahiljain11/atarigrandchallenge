@@ -1,10 +1,13 @@
 from os import path, listdir
+import os
 import numpy as np
 from scipy import stats as st
 import math
 import json
 import librosa
 import pickle
+import torch
+from progress.bar import Bar
 
 class AtariDataset():
 
@@ -31,11 +34,17 @@ class AtariDataset():
         self.audio_path = path.join(data_path, AtariDataset.AUDIO_SUBDIR)
         self.heatmap_path = path.join(data_path, AtariDataset.PRECOMPUTED_HEATMAP)
         self.pasevec_path = path.join(data_path, AtariDataset.PASE_VEC)
+
+        with open('complete.json') as f:
+            self.complete = json.load(f)
+        with open('gamekeys.json') as f:
+            self.mapping  = json.load(f)
     
         #check that the we have the trajs where expected
         assert path.exists(self.trajs_path)
         
         self.pasevec = self.load_pase()
+        self.rawpase = self.load_raw_pase()
         self.annotations  = self.load_annotations()
         self.heatmap = self.load_heatmap()
         self.trajectories = self.load_trajectories()
@@ -70,6 +79,10 @@ class AtariDataset():
                 traj_num = int(traj.split(".")[0])
                 f = open(path.join(game_dir, traj))
 
+                # heatmaps for spaceinvaders > 10 are not present
+                if traj_num > 10:
+                    continue
+
                 # TODO: tidy up lengths 
                 f_len = len(f.readlines())
                 a_len = len(self.annotations[game][traj_num])
@@ -93,7 +106,7 @@ class AtariDataset():
                             curr_trans['action']   = int(curr_data[4])
                             curr_trans['ann']      = self.annotations[game][traj_num][i - diff]
                             curr_trans['heatmap']  = self.heatmap[game][traj_num][i - diff]
-                            curr_trans['pase']     = self.pasevec[game][traj_num][i]
+                            curr_trans['pase']     = self.pasevec[game][traj_num][i - diff]
                             curr_traj.append(curr_trans)
                 trajectories[game][int(traj.split('.txt')[0])] = curr_traj
         return trajectories
@@ -171,6 +184,67 @@ class AtariDataset():
                 pase[game] = data
 
         return pase
+
+    def frames_finder(self, wav_file: str, game: str):
+        name = wav_file.split(".")[0]
+        traj_name = self.mapping[game][name]
+        if 'R0YWVY6RKQ' in traj_name:
+            return -1
+        return len(self.complete[traj_name].keys())
+    
+    def pase_on_file(self, data_path: str, num_frames: int, name: str):
+        raw = [None] * num_frames
+        y, sr = librosa.load(data_path, sr=48000)
+        SECONDS = librosa.get_duration(y=y, sr=sr)
+        y = torch.tensor(y).view((1, 1, -1))
+        CONST = 16
+        AUDIO_FRAME = y.shape[2]
+
+        #sec_per_frame = SECONDS / num_frames
+        frame_divide_16 = num_frames / CONST
+        divided = int(AUDIO_FRAME / frame_divide_16)
+
+        bar = Bar(f'Traj #{name}', max=num_frames)
+        for i in range(num_frames):
+            if i % CONST == 0:
+                num = i / CONST
+                start = int(divided * (num))
+                end   = int(divided * (num + 1))
+
+                s = y[:,:,start:end]
+
+                temp = s
+
+            raw[i]  = temp
+            bar.next()
+        bar.finish()
+
+        return raw
+
+    def load_raw_pase(self):
+        print('Loading raw pase...')
+        raw_pase = {}
+        count = 0
+        for game in listdir(self.audio_path):
+            game_path = path.join(self.audio_path, game)
+            final = {}
+            for wav_file in os.listdir(game_path):
+                wav_path = path.join(game_path, wav_file)
+
+                num_frames = self.frames_finder(wav_file, game)
+                if num_frames == -1:
+                    continue
+
+                # actually get raw data
+                raw = self.pase_on_file(wav_path, num_frames, str(count))
+
+                num = int(wav_file.split('.')[0])
+                final[num] = raw
+                count += 1
+
+            raw_pase[game] = final
+
+        return raw_pase
 
     def compile_data(self, dataset_path, game, score_lb=0, score_ub=math.inf, max_nb_transitions=None):
 
