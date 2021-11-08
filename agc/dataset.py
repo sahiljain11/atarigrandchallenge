@@ -215,7 +215,8 @@ class AtariDataset():
 
                 s = y[:,:,start:end]
 
-                temp = s.numpy()
+                temp = s.numpy().reshape((1, -1))
+                assert temp.shape[1] != 0 and temp.shape[1] != 1
 
             raw[i] = temp
             bar.next()
@@ -238,6 +239,7 @@ class AtariDataset():
 
                 # actually get raw data
                 raw = self.pase_on_file(wav_path, num_frames, str(count))
+                assert len(raw) != 0
 
                 num = int(wav_file.split('.')[0])
                 final[num] = raw
