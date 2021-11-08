@@ -44,7 +44,7 @@ class AtariDataset():
         assert path.exists(self.trajs_path)
         
         self.pasevec = self.load_pase()
-        self.rawpase = self.load_raw_pase()
+        self.raw_audio = self.load_raw_audio()
         self.annotations  = self.load_annotations()
         self.heatmap = self.load_heatmap()
         self.trajectories = self.load_trajectories()
@@ -182,6 +182,7 @@ class AtariDataset():
                 data = np.load(pase_game, allow_pickle=True).item()
                 game = game.split('_vec.npy')[0]
                 pase[game] = data
+                #del pase[game][int(len(pase[game].keys()))]
 
         return pase
 
@@ -190,7 +191,7 @@ class AtariDataset():
         traj_name = self.mapping[game][name]
         if 'R0YWVY6RKQ' in traj_name:
             return -1
-        return len(self.complete[traj_name].keys())
+        return len(self.complete[traj_name].keys()) - 1
     
     def pase_on_file(self, data_path: str, num_frames: int, name: str):
         raw = [None] * num_frames
@@ -213,16 +214,15 @@ class AtariDataset():
 
                 s = y[:,:,start:end]
 
-                temp = s
+                temp = s.numpy()
 
-            raw[i]  = temp
+            raw[i] = temp
             bar.next()
         bar.finish()
-
         return raw
 
-    def load_raw_pase(self):
-        print('Loading raw pase...')
+    def load_raw_audio(self):
+        print('Loading raw audio...')
         raw_pase = {}
         count = 0
         for game in listdir(self.audio_path):
