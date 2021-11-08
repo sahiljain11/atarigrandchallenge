@@ -124,7 +124,9 @@ class AtariDataset():
                 # compute total frames and audio length
                 key = int(ann.split(".")[0])
                 game_folder = path.join(self.screens_path, game)
-                NUM_FRAMES = len(listdir(path.join(game_folder, str(key))))
+                #NUM_FRAMES = len(listdir(path.join(game_folder, str(key))))
+                wav_file = f"{ann.split('.')[0]}.wav"
+                NUM_FRAMES = self.frames_finder(wav_file, game)
 
                 audio_file_path = path.join(audio_game_dir, f"{key}.wav")
                 y, sr = librosa.load(audio_file_path, sr=48000)
@@ -132,7 +134,7 @@ class AtariDataset():
 
                 anns_file_path = path.join(ann_game_dir, ann)
 
-                curr_ann = []
+                curr_ann = [None] * NUM_FRAMES
                 json_info = json.load(open(anns_file_path, "r"))
 
                 for frame in range(NUM_FRAMES):
@@ -151,7 +153,7 @@ class AtariDataset():
                             data["word"] = word
                             data["conf"] = conf
 
-                    curr_ann.append(data)
+                    curr_ann[frame] = data
                 annotations[game][key] = curr_ann
         return annotations
 
@@ -182,7 +184,6 @@ class AtariDataset():
                 data = np.load(pase_game, allow_pickle=True).item()
                 game = game.split('_vec.npy')[0]
                 pase[game] = data
-                #del pase[game][int(len(pase[game].keys()))]
 
         return pase
 
@@ -191,7 +192,7 @@ class AtariDataset():
         traj_name = self.mapping[game][name]
         if 'R0YWVY6RKQ' in traj_name:
             return -1
-        return len(self.complete[traj_name].keys()) - 1
+        return len(self.complete[traj_name].keys())
     
     def pase_on_file(self, data_path: str, num_frames: int, name: str):
         raw = [None] * num_frames
