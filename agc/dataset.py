@@ -222,9 +222,6 @@ class AtariDataset():
 
             raw[i] = temp
             bar.next()
-
-            if i > 100:
-                raise Exception("break point")
         bar.finish()
         return raw
 
