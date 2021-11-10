@@ -197,14 +197,14 @@ class AtariDataset():
     def pase_on_file(self, data_path: str, num_frames: int, name: str):
         raw = [None] * num_frames
         y, sr = librosa.load(data_path, sr=48000)
+        print(y.shape)
         SECONDS = librosa.get_duration(y=y, sr=sr)
-        y = torch.tensor(y).view((1, 1, -1))
         CONST = 16
-        AUDIO_FRAME = y.shape[2]
+        AUDIO_FRAME = y.shape[0]
 
         #sec_per_frame = SECONDS / num_frames
-        frame_divide_16 = num_frames / CONST
-        divided = int(AUDIO_FRAME / frame_divide_16)
+        num_stacks = num_frames / CONST
+        divided = int(AUDIO_FRAME / num_stacks)
 
         bar = Bar(f'Traj #{name}', max=num_frames)
         for i in range(num_frames):
@@ -213,13 +213,18 @@ class AtariDataset():
                 start = int(divided * (num))
                 end   = int(divided * (num + 1))
 
-                s = y[:,:,start:end]
+                # should be 2 dimensional 
+                s = y[start:end]
+                print(s.shape)
 
-                temp = s.numpy().reshape((1, -1))
-                assert temp.shape[1] != 0 and temp.shape[1] != 1
+                temp = s
+                #assert temp.shape[1] != 0 and temp.shape[1] != 1
 
             raw[i] = temp
             bar.next()
+
+            if i > 100:
+                raise Exception("break point")
         bar.finish()
         return raw
 
