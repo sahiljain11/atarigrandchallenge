@@ -206,7 +206,7 @@ class AtariDataset():
         num_stacks = num_frames / CONST
         divided = int(AUDIO_FRAME / num_stacks)
 
-        bar = Bar(f'Traj #{name}', max=num_frames)
+        # bar = Bar(f'Traj #{name}', max=num_frames)
         for i in range(num_frames):
             if i % CONST == 0:
                 num = i / CONST
@@ -221,11 +221,11 @@ class AtariDataset():
                 #assert temp.shape[1] != 0 and temp.shape[1] != 1
 
             raw[i] = temp
-            bar.next()
+            # bar.next()
 
-            if i > 100:
-                raise Exception("break point")
-        bar.finish()
+            # if i > 100:
+            #     raise Exception("break point")
+        # bar.finish()
         return raw
 
     def load_raw_audio(self):
